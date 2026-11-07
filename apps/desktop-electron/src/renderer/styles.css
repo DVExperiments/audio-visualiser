@@ -1,0 +1,331 @@
+/* XP-era shell, restrained: the visualisation is the hero, the chrome recedes. */
+:root {
+  --stage: #000000;
+  --bar: #1B2A44;
+  --bar-edge: #4F6E9E;
+  --bar-deep: #111C2F;
+  --text: #E6EEF9;
+  --muted: #9FB2D2;
+  --jewel-top: #3C6FB4;
+  --jewel-bottom: #1C3B6B;
+  --sim: #FFB13B;
+  --bad: #FF4B4B;
+  --ok: #3CCB7F;
+  --focus: #8FD3FF;
+  color-scheme: dark;
+  font: 12px/1.35 Tahoma, "Segoe UI", Verdana, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--stage); color: var(--text); overflow: hidden; }
+body { display: flex; flex-direction: column; user-select: none; }
+
+#stage { position: relative; flex: 1; min-height: 0; }
+/* each preset has its own canvas; during a transition the outgoing one sits on top and dissolves */
+#stage canvas.viz { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* on-screen title: preset name and status, fading in and out */
+#osd {
+  position: absolute; left: 50%; top: 9%; transform: translateX(-50%); z-index: 5; pointer-events: none;
+  padding: 8px 18px; border-radius: 4px; background: rgba(8, 12, 22, 0.55); text-align: center;
+  opacity: 0; transition: opacity 400ms ease; display: grid; gap: 2px;
+}
+#osd.visible { opacity: 1; }
+#osd strong { font-size: 18px; font-weight: bold; }
+#osd span { font-size: 11px; color: var(--muted); }
+
+#notice {
+  position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%);
+  max-width: 34rem; padding: 18px 22px; background: var(--bar-deep);
+  border: 1px solid var(--bar-edge); border-radius: 6px;
+}
+#notice h1 { font-size: 16px; margin: 0 0 6px; font-weight: bold; }
+#notice p { margin: 0; color: var(--muted); white-space: pre-line; }
+
+#diagnostics {
+  position: absolute; top: 10px; right: 10px; width: 300px; max-height: calc(100% - 20px); overflow: auto;
+  padding: 10px 12px; background: rgba(10, 16, 28, 0.92); border: 1px solid var(--bar-edge); border-radius: 4px;
+}
+#diagnostics h2 { font-size: 13px; margin: 0 0 6px; }
+#diag-list { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 11px; }
+#diag-list dt { color: var(--muted); }
+#diag-list dd { margin: 0; text-align: right; }
+#diag-list .section { grid-column: 1 / -1; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(79,110,158,0.4); color: var(--text); font-weight: bold; }
+
+/* ---- "How it works" panel ---- */
+#explain {
+  position: absolute; top: 10px; left: 10px; width: min(520px, 46vw); max-height: calc(100% - 20px); overflow: auto;
+  padding: 12px 14px; background: rgba(8, 12, 22, 0.94); border: 1px solid var(--bar-edge); border-radius: 4px;
+  user-select: text;
+}
+#explain[hidden] { display: none; }
+#explain h2 { font-size: 15px; margin: 0 0 4px; }
+#explain h3 { font-size: 12px; margin: 14px 0 4px; color: var(--focus); }
+#explain p { margin: 0 0 6px; color: var(--muted); }
+#explain .summary { color: var(--text); }
+#explain .formula { margin: 6px 0; overflow-x: auto; overflow-y: hidden; color: var(--text); font-size: 13px; }
+#explain .formula .katex-display { margin: 0.3em 0; }
+#explain .tex-error { font-family: Consolas, monospace; color: var(--bad); font-size: 11px; white-space: pre-wrap; }
+#explain table { width: 100%; border-collapse: collapse; margin: 4px 0 2px; font-size: 11px; }
+#explain td { padding: 2px 4px; border-top: 1px solid rgba(79,110,158,0.25); vertical-align: top; }
+#explain td.sym { width: 22%; color: var(--text); }
+#explain td.val { width: 18%; text-align: right; color: var(--sim); font-variant-numeric: tabular-nums; }
+#explain td.meaning { color: var(--muted); }
+
+/* ---- control bar ---- */
+#bar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 10px;
+  background: linear-gradient(var(--bar), var(--bar-deep));
+  border-top: 1px solid var(--bar-edge);
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+/* the interface fades after 3 s without mouse movement, in any window mode (H hides it at once) */
+body.idle #bar { transform: translateY(100%); opacity: 0; pointer-events: none; }
+body.nocursor, body.nocursor * { cursor: none; }
+
+.group { display: flex; align-items: center; gap: 6px; }
+.grow { flex: 1; min-width: 0; }
+
+button, select { font: inherit; color: var(--text); }
+button { cursor: pointer; }
+.jewel {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid #6E95D3;
+  background: radial-gradient(circle at 50% 30%, #7FA9E6 0, var(--jewel-top) 40%, var(--jewel-bottom) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35); font-size: 11px; line-height: 1; padding: 0;
+}
+.jewel:hover { filter: brightness(1.15); }
+.jewel:active { filter: brightness(0.9); }
+.plain {
+  height: 24px; padding: 0 10px; border-radius: 3px; border: 1px solid #3B5684;
+  background: linear-gradient(#2A4370, #1D3256);
+}
+.plain:hover { border-color: var(--bar-edge); }
+.plain[aria-pressed="true"], .plain[aria-expanded="true"] { background: linear-gradient(#3C6FB4, #24467C); }
+select {
+  height: 24px; max-width: 220px; padding: 0 4px; border-radius: 3px; border: 1px solid #3B5684; background: #14223A;
+}
+.input-field select { max-width: 340px; width: 100%; }
+.input-field { flex: 1; min-width: 120px; max-width: 340px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.state { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.state .sim { color: #1B1300; background: var(--sim); padding: 1px 6px; border-radius: 3px; margin-right: 6px; }
+.state .bad { color: var(--bad); }
+.state .ok { color: var(--ok); }
+
+#fav[aria-pressed="true"] { color: #FFD24A; }
+.popover h3 { margin: 4px 0 0; font-size: 12px; color: var(--focus); }
+.popover .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
+.popover input[type="text"] { height: 24px; padding: 0 6px; border-radius: 3px; border: 1px solid #3B5684; background: #14223A; color: var(--text); font: inherit; }
+.slider { display: grid; grid-template-columns: 9.5em 1fr 4.2em; gap: 8px; align-items: center; }
+.slider input[type="range"] { width: 100%; accent-color: var(--focus); }
+.slider output { text-align: right; color: var(--sim); font-variant-numeric: tabular-nums; }
+.popover.influence { right: auto; left: 50%; transform: translateX(-50%); width: 420px; }
+.plain.accent { border-color: var(--sim); box-shadow: 0 0 0 1px rgba(255,177,59,0.35) inset; }
+.modal { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0, 0, 0, 0.55); }
+.modal[hidden] { display: none; }
+.modal-box { width: min(560px, 92vw); max-height: 86vh; overflow: auto; padding: 16px 18px; background: var(--bar-deep); border: 1px solid var(--bar-edge); border-radius: 6px; display: grid; gap: 10px; }
+.modal-box h2 { margin: 0; font-size: 16px; }
+.modal-box p { margin: 0; color: var(--muted); }
+.modal-box table { border-collapse: collapse; font-size: 12px; }
+.modal-box td { padding: 3px 8px 3px 0; border-top: 1px solid rgba(79,110,158,0.25); vertical-align: top; }
+.modal-box td.v { color: var(--sim); text-align: right; white-space: nowrap; }
+.progress { height: 8px; border-radius: 4px; background: #14223A; overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--focus); }
+.lib-row { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; margin-bottom: 4px; }
+.plain.small { height: 20px; padding: 0 6px; font-size: 11px; }
+.popover {
+  position: absolute; right: 10px; bottom: 50px; width: 360px; max-height: calc(100vh - 80px); overflow: auto; padding: 12px;
+  background: var(--bar-deep); border: 1px solid var(--bar-edge); border-radius: 4px;
+  display: grid; gap: 10px;
+}
+.popover[hidden], #notice[hidden], #diagnostics[hidden] { display: none; }
+.check { display: flex; gap: 8px; align-items: flex-start; }
+.field.block { display: grid; gap: 4px; }
+.field.block select { max-width: none; }
+.keys { margin: 0; color: var(--muted); font-size: 11px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+@media (max-width: 760px) {
+  #random, #diag-toggle { display: none; }
+  select { max-width: 130px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #bar { transition: none; }
+}
+
+/* =====================================================================================
+   v0.14 bar, after Windows Media Player 9/10's "Now Playing" strip: a transport capsule with
+   a big round central orb, a recessed info screen, and compact tools. Not glassmorphism:
+   opaque gradients with a single highlight line, as WMP drew them.
+   ===================================================================================== */
+.sprite { display: none; }
+#bar {
+  height: 52px; gap: 12px; padding: 0 12px;
+  background: linear-gradient(#16294B 0%, #0B1A33 48%, #050A14 100%);
+  border-top: 1px solid #3E5F96;
+  box-shadow: inset 0 1px 0 rgba(160, 200, 255, 0.18);
+}
+#bar svg { width: 18px; height: 18px; display: block; }
+
+/* transport capsule */
+.transport {
+  display: flex; align-items: center; gap: 2px; padding: 3px 6px; border-radius: 22px;
+  background: linear-gradient(#2A4A7F, #10213F); border: 1px solid #47689F;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.tbtn {
+  width: 30px; height: 30px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center;
+  background: transparent; color: #D7E6FF;
+}
+.tbtn:hover { background: rgba(140, 190, 255, 0.16); }
+.tbtn:active { background: rgba(140, 190, 255, 0.28); }
+.tbtn.mini { width: 18px; }
+.tbtn.mini svg { width: 14px; height: 14px; }
+.orb {
+  position: relative; width: 42px; height: 42px; margin: -6px 2px; border-radius: 50%; padding: 0; display: grid; place-items: center;
+  color: #fff; border: 1px solid #7DB9FF;
+  background: radial-gradient(circle at 50% 30%, #A9D6FF 0, #6FB6FF 22%, #2D6CC2 60%, #1C4E9A 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6), 0 0 10px rgba(95, 170, 255, 0.55), 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+.orb svg { width: 22px; height: 22px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+.orb:hover { filter: brightness(1.12); }
+.orb:active { filter: brightness(0.92); }
+.orb-badge { position: absolute; right: -3px; bottom: -3px; font-size: 13px; color: #FFD24A; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+.orb-badge[hidden] { display: none; }
+
+/* info screen */
+.infopanel {
+  display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 340px; max-width: 460px;
+  height: 40px; padding: 2px 8px 2px 4px; border-radius: 6px;
+  background: linear-gradient(#02060E, #071226); border: 1px solid #22385E;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.85), 0 1px 0 rgba(140, 180, 255, 0.12);
+}
+.info-lines { display: grid; min-width: 0; flex: 1; }
+.info-lines label { display: block; min-width: 0; }
+.infopanel select {
+  appearance: none; -webkit-appearance: none; width: 100%; max-width: none; border: 0; background: transparent; padding: 0 4px;
+  text-overflow: ellipsis; cursor: pointer;
+}
+.infopanel select:hover { background: rgba(120, 180, 255, 0.08); }
+.infopanel select option { background: #0B1A33; color: var(--text); }
+.info-title { height: 20px; font-size: 14px; font-weight: bold; color: #BFE6FF; text-shadow: 0 0 6px rgba(95, 190, 255, 0.55); }
+.info-sub { height: 15px; font-size: 11px; color: #6F93C6; }
+.star { width: 28px; height: 28px; border: 0; padding: 0; background: transparent; color: #8AA6D6; display: grid; place-items: center; border-radius: 50%; }
+.star svg { width: 20px; height: 20px; }
+.star:hover { color: #FFD24A; background: rgba(255, 210, 74, 0.1); }
+.star[aria-pressed="true"] { color: #FFD24A; filter: drop-shadow(0 0 4px rgba(255, 200, 60, 0.6)); }
+
+/* input with a status light (the device text moved into its tooltip and Diagnostics) */
+.input-group { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 0 1 230px; }
+.input-group select { width: 100%; max-width: 230px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #4A5A74; box-shadow: inset 0 1px 1px rgba(255,255,255,0.35); }
+.dot.ok { background: #3CCB7F; box-shadow: 0 0 6px rgba(60, 203, 127, 0.7), inset 0 1px 1px rgba(255,255,255,0.45); }
+.dot.quiet { background: #7C8BA6; }
+.dot.sim { background: #FFB13B; box-shadow: 0 0 6px rgba(255, 177, 59, 0.7); }
+.dot.bad { background: #FF4B4B; box-shadow: 0 0 6px rgba(255, 75, 75, 0.8); }
+
+/* tools */
+.tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.tool {
+  height: 30px; padding: 0 8px; border-radius: 15px; border: 1px solid transparent; display: flex; align-items: center; gap: 6px;
+  background: transparent; color: #C9DAF5; font-size: 12px;
+}
+.tool svg { width: 17px; height: 17px; }
+.tool:hover { background: rgba(140, 190, 255, 0.12); border-color: rgba(120, 160, 230, 0.35); }
+.tool[aria-pressed="true"], .tool[aria-expanded="true"] { background: linear-gradient(#2D5BA0, #1A3A6E); border-color: #5C86C9; color: #fff; }
+.tool.accent { border-color: var(--sim); color: #FFE2A8; }
+/* labels: all above 1480 px; the three most used (Favourites, Auto, Influence) down to 1180 px; then icons with tooltips */
+@media (max-width: 1480px) { .tool:not(.primary) span { display: none; } .tool:not(.primary) { padding: 0 7px; } }
+@media (max-width: 1180px) { .tool span { display: none; } .tool { padding: 0 7px; } }
+.infopanel { max-width: 400px; }
+@media (max-width: 900px) { .input-group { display: none; } }
+@media (max-width: 700px) { .tools #explain-toggle, .tools #diag-toggle { display: none; } }
+
+/* shuffle menu and favourites panel */
+.popover.menu { left: 12px; right: auto; width: 250px; padding: 6px; gap: 2px; }
+.menuitem { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: var(--text); text-align: left; }
+.menuitem svg { width: 16px; height: 16px; }
+.menuitem:hover { background: rgba(120, 170, 255, 0.15); }
+.menuitem[aria-checked="true"] { background: linear-gradient(#2D5BA0, #1A3A6E); }
+.popover.favs { right: 12px; left: auto; width: 340px; }   /* opens above its button, like Settings */
+.popover .plain { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.popover .plain svg { width: 14px; height: 14px; }
+.fav-items { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow: auto; display: grid; gap: 2px; }
+.fav-items li { display: grid; grid-template-columns: 1fr auto; align-items: center; border-radius: 4px; }
+.fav-items li:hover { background: rgba(120, 170, 255, 0.1); }
+.fav-items li.playing { background: rgba(60, 120, 220, 0.22); }
+.fav-play { display: grid; text-align: left; gap: 1px; padding: 5px 8px; border: 0; background: transparent; color: var(--text); min-width: 0; }
+.fav-play strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-play span { font-size: 10px; color: var(--muted); }
+.fav-items li.playing .fav-play strong::before { content: "▶ "; color: #7DB9FF; }
+.fav-remove { width: 26px; height: 26px; margin-right: 4px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
+.fav-remove:hover { background: rgba(255, 90, 90, 0.18); color: #FF8A8A; }
+.fav-empty { color: var(--muted); font-size: 12px; padding: 8px 4px; }
+
+/* =====================================================================================
+   v0.20 Appearance: Style (Classic | Modern) × Mode (Dark | Light), set as body classes.
+   Classic Dark is the default look above; the rest override variables and a few rules.
+   The visualisations themselves keep their own looks (most are designed on black).
+   ===================================================================================== */
+:root {
+  --panel-bg: rgba(10, 16, 28, 0.94); --panel-border: var(--bar-edge); --control-bg: #14223A; --control-border: #3B5684;
+  --hover: rgba(140, 190, 255, 0.12); --active-bg: linear-gradient(#2D5BA0, #1A3A6E); --active-border: #5C86C9; --active-text: #fff;
+  --icon: #C9DAF5; --info-text: #BFE6FF; --info-sub: #6F93C6;
+}
+#diagnostics, #explain, .popover, .modal-box, #notice { background: var(--panel-bg); border-color: var(--panel-border); color: var(--text); }
+select, .popover input[type="text"], .progress { background: var(--control-bg); border-color: var(--control-border); color: var(--text); }
+.plain { color: var(--text); }
+.tool, .tbtn, .star { color: var(--icon); }
+.tool:hover, .tbtn:hover, .menuitem:hover, .fav-items li:hover { background: var(--hover); }
+.tool[aria-pressed="true"], .tool[aria-expanded="true"], .menuitem[aria-checked="true"], .plain[aria-pressed="true"], .plain[aria-expanded="true"] { background: var(--active-bg); border-color: var(--active-border); color: var(--active-text); }
+.info-title { color: var(--info-text); }
+.info-sub { color: var(--info-sub); }
+.infopanel select option, select option { background: var(--control-bg); color: var(--text); }
+
+/* ---------- Classic Light: after WMP 9's silver skin ---------- */
+body.theme-light:not(.style-modern) {
+  --bar: #DCE3EE; --bar-edge: #8FA2C2; --bar-deep: #EEF2F8; --text: #1B2433; --muted: #556277; --focus: #2E6BD1;
+  --panel-bg: rgba(247, 249, 252, 0.97); --panel-border: #A9B6CC; --control-bg: #FFFFFF; --control-border: #A9B6CC;
+  --hover: rgba(46, 107, 209, 0.12); --active-bg: linear-gradient(#5B95EE, #2E62C2); --active-border: #2E62C2;
+  --icon: #23324A; --info-text: #12345E; --info-sub: #4C6A93; color-scheme: light;
+}
+body.theme-light:not(.style-modern) #bar { background: linear-gradient(#FBFCFE 0%, #E3E9F2 50%, #C9D3E2 100%); border-top-color: #9FB0CC; box-shadow: inset 0 1px 0 #fff; }
+body.theme-light:not(.style-modern) .transport { background: linear-gradient(#FDFEFF, #C9D3E3); border-color: #8FA2C2; box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(40, 60, 100, 0.35); }
+body.theme-light:not(.style-modern) .infopanel { background: linear-gradient(#DCE8F7, #F4F8FD); border-color: #93A8C8; box-shadow: inset 0 2px 4px rgba(40, 70, 120, 0.25); }
+body.theme-light:not(.style-modern) .info-title { text-shadow: none; }
+
+/* ---------- Modern (Dark): flat surfaces, no gradients or bevels ---------- */
+body.style-modern {
+  --bar: #17181C; --bar-edge: #2E3138; --bar-deep: #1F2126; --text: #F2F4F8; --muted: #9AA3B2; --focus: #60A5FA;
+  --panel-bg: #1F2126; --panel-border: #2E3138; --control-bg: #2A2C33; --control-border: #3A3D45;
+  --hover: rgba(255, 255, 255, 0.07); --active-bg: #3B82F6; --active-border: #3B82F6; --icon: #D5DAE3;
+  --info-text: #F2F4F8; --info-sub: #9AA3B2;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+body.style-modern #bar { background: var(--bar); border-top: 1px solid var(--bar-edge); box-shadow: none; }
+body.style-modern .transport { background: transparent; border: 0; box-shadow: none; gap: 4px; }
+body.style-modern .tbtn { border-radius: 8px; }
+body.style-modern .orb { background: var(--active-bg); border: 0; box-shadow: none; width: 38px; height: 38px; margin: -4px 2px; }
+body.style-modern .orb svg { filter: none; }
+body.style-modern .infopanel { background: var(--bar-deep); border: 1px solid var(--bar-edge); border-radius: 10px; box-shadow: none; }
+body.style-modern .info-title { text-shadow: none; font-weight: 600; }
+body.style-modern .tool { border-radius: 8px; }
+body.style-modern .popover, body.style-modern #explain, body.style-modern #diagnostics, body.style-modern .modal-box, body.style-modern #notice {
+  border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+body.style-modern select, body.style-modern .popover input[type="text"], body.style-modern .plain { border-radius: 6px; }
+body.style-modern .plain { background: var(--control-bg); border-color: var(--control-border); }
+body.style-modern .dot { box-shadow: none; }
+
+/* ---------- Modern Light ---------- */
+body.style-modern.theme-light {
+  --bar: #FFFFFF; --bar-edge: #E3E6EB; --bar-deep: #F3F4F6; --text: #1C1F24; --muted: #5F6672; --focus: #2563EB;
+  --panel-bg: #FFFFFF; --panel-border: #E3E6EB; --control-bg: #F3F4F6; --control-border: #D5D9E0;
+  --hover: rgba(15, 23, 42, 0.06); --active-bg: #2563EB; --active-border: #2563EB; --icon: #2B313B;
+  --info-text: #1C1F24; --info-sub: #5F6672; color-scheme: light;
+}
+body.style-modern.theme-light .popover, body.style-modern.theme-light #explain, body.style-modern.theme-light #diagnostics, body.style-modern.theme-light .modal-box { box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16); }
+body.theme-light .orb-badge { text-shadow: 0 0 2px #fff, 0 0 4px #fff; }
+body.theme-light .star[aria-pressed="true"] { color: #E0A800; }

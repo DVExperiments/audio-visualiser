@@ -1,0 +1,101 @@
+{
+  "name": "audio-visualisation-studio",
+  "productName": "Audio Visualisation Studio",
+  "version": "0.20.3",
+  "description": "Real-time audio-reactive visualiser for Windows (WASAPI loopback / microphone capture, procedural rendering).",
+  "main": "src/main/main.js",
+  "private": true,
+  "license": "SEE LICENSE IN ../../LICENSE.md",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js test/*.test.mjs",
+    "docs:maths": "node tools/gen-maths-doc.mjs",
+    "pack": "electron-builder --dir",
+    "dist:win": "electron-builder --win nsis portable --x64",
+    "soak": "node --expose-gc test/soak/run.mjs",
+    "verify:package": "node tools/verify-package.mjs"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.18.0"
+  },
+  "dependencies": {
+    "katex": "0.19.0",
+    "three": "0.186.1"
+  },
+  "build": {
+    "appId": "com.audiovisualisationstudio.app",
+    "productName": "Audio Visualisation Studio",
+    "copyright": "Copyright \u00a9 2026",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!**/*.test.*",
+      {
+        "from": "node_modules/three/examples/jsm",
+        "to": "node_modules/three/examples/jsm",
+        "filter": [
+          "**/*.js"
+        ]
+      },
+      "!node_modules/three/src/**",
+      "!node_modules/katex/src/**"
+    ],
+    "extraResources": [
+      {
+        "from": "service-bin",
+        "to": "service-bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "forceCodeSigning": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Audio Visualisation Studio",
+      "uninstallDisplayName": "Audio Visualisation Studio",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png",
+      "category": "AudioVideo"
+    }
+  },
+  "author": "Audio Visualisation Studio contributors"
+}

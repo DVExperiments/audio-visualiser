@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Self-contained test runner: no NuGet packages, so it builds offline. Exit code 0 = all passed. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Portable, device-independent parts of the capture service are tested here too. -->
+    <Compile Include="..\..\services\audio-capture-dotnet\Core\Buffers.cs" Link="Linked\Buffers.cs" />
+    <Compile Include="..\..\services\audio-capture-dotnet\Core\Protocol.cs" Link="Linked\Protocol.cs" />
+    <Compile Include="..\..\services\audio-capture-dotnet\Core\Session.cs" Link="Linked\Session.cs" />
+    <Compile Include="..\..\services\audio-capture-dotnet\Core\SyntheticSource.cs" Link="Linked\SyntheticSource.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\libs\dsp-core\DspCore.csproj" />
+  </ItemGroup>
+</Project>

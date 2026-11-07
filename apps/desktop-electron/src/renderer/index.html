@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self' 'sha256-p2wJOWN8rB9YvERkPNjvIDxkJTxs+fOHzf3zG8iFAQc='; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Audio Visualisation Studio</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="../../node_modules/katex/dist/katex.min.css">
+</head>
+<body>
+  <main id="stage">
+    <canvas id="viz" class="viz" aria-label="Audio visualisation"></canvas>
+    <div id="osd" aria-live="polite"></div>
+    <div id="notice" hidden>
+      <h1 id="notice-title"></h1>
+      <p id="notice-body"></p>
+    </div>
+    <aside id="explain" hidden aria-label="How it works">
+      <div id="explain-body"></div>
+    </aside>
+    <aside id="diagnostics" hidden aria-label="Diagnostics">
+      <h2>Diagnostics</h2>
+      <dl id="diag-list"></dl>
+    </aside>
+  </main>
+
+  <!-- icon sprite (SVG symbols: identical on every PC, unlike font glyphs) -->
+  <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-prev" viewBox="0 0 24 24"><path fill="currentColor" d="M6 5h2.4v14H6zM20 5v14L9.2 12z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path fill="currentColor" d="M15.6 5H18v14h-2.4zM4 5v14l10.8-7z"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3.5c2 0 3.3 1 4.4 2.7l2.2 3.6C14.2 15 15.5 17 17.5 17H21"/><path d="M3 17h3.5c1.3 0 2.3-.6 3.1-1.5M14.4 8.5c.8-.9 1.8-1.5 3.1-1.5H21"/><path d="M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5"/></g></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.6l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17.2l-5.9 3.2 1.3-6.5L2.5 9.4l6.6-.8z"/></symbol>
+    <symbol id="i-star-o" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3.6l2.6 5.4 5.9.7-4.4 4 1.2 5.8L12 16.6l-5.3 2.9 1.2-5.8-4.4-4 5.9-.7z"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path fill="currentColor" d="M6.5 3.2l1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6L1.3 7l3.6-.5z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 7h8M14 12h8M5 17h17M5 21h17"/></symbol>
+    <symbol id="i-auto" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 2.8v4h-4M6 21.2v-4h4"/></g></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></g></symbol>
+    <symbol id="i-fx" viewBox="0 0 24 24"><text x="12" y="17" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="15" fill="currentColor">∑</text></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12h4l2.5-6 4 12 3-9 2 3H22"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path stroke-linecap="round" d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></g></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path fill="currentColor" d="M6 9h12l-6 7z"/></symbol>
+  </svg>
+
+  <footer id="bar">
+    <!-- transport capsule, after WMP's: previous · big round shuffle orb · next · shuffle source -->
+    <div class="transport" role="group" aria-label="Visualisation controls">
+      <button id="prev" class="tbtn" title="Previous visualisation (←)" aria-label="Previous visualisation"><svg><use href="#i-prev"/></svg></button>
+      <button id="random" class="orb" title="Shuffle (R)" aria-label="Shuffle"><svg><use href="#i-shuffle"/></svg><span id="shuffle-badge" class="orb-badge" hidden>★</span></button>
+      <button id="next" class="tbtn" title="Next visualisation (→)" aria-label="Next visualisation"><svg><use href="#i-next"/></svg></button>
+      <button id="shuffle-menu-toggle" class="tbtn mini" title="Shuffle from…" aria-label="Choose what to shuffle" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-down"/></svg></button>
+    </div>
+
+    <!-- info display, after WMP's track-info screen -->
+    <div class="infopanel" role="group" aria-label="Now playing">
+      <div class="info-lines">
+        <label><span class="sr">Visualisation</span><select id="preset" class="info-title" title="Visualisation"></select></label>
+        <label><span class="sr">Collection</span><select id="collection" class="info-sub" title="Collection (↑/↓)"></select></label>
+      </div>
+      <button id="fav" class="star" title="Add to favourites (S)" aria-pressed="false" aria-label="Favourite"><svg><use href="#i-star-o"/></svg></button>
+    </div>
+
+    <div class="input-group" role="group" aria-label="Audio input">
+      <span id="status-dot" class="dot" role="img" aria-label="Status"></span>
+      <label class="field input-field"><span class="sr">Audio input</span><select id="input" title="Audio input (I)"></select></label>
+    </div>
+
+    <div class="tools" role="group" aria-label="Tools">
+      <button id="fav-list-toggle" class="tool primary" title="Favourites list (L)" aria-expanded="false"><svg><use href="#i-list"/></svg><span>Favourites</span></button>
+      <button id="auto-toggle" class="tool primary" aria-pressed="false"><svg><use href="#i-auto"/></svg><span>Auto</span></button>
+      <button id="influence-toggle" class="tool primary" aria-expanded="false" title="Influence: how strongly sound shapes, moves and colours the picture (U)"><svg><use href="#i-sliders"/></svg><span>Influence</span></button>
+      <button id="explain-toggle" class="tool" title="How it works: the maths behind this visualisation (E)" aria-pressed="false"><svg><use href="#i-fx"/></svg><span>How it works</span></button>
+      <button id="diag-toggle" class="tool" title="Diagnostics (D)" aria-pressed="false"><svg><use href="#i-pulse"/></svg><span>Diagnostics</span></button>
+      <button id="settings-toggle" class="tool" title="Settings (O)" aria-expanded="false"><svg><use href="#i-gear"/></svg><span>Settings</span></button>
+      <button id="fullscreen" class="tbtn" title="Full screen (F)" aria-label="Full screen"><svg><use href="#i-full"/></svg></button>
+    </div>
+
+    <div id="shuffle-menu" class="popover menu" hidden role="menu" aria-label="Shuffle from">
+      <button class="menuitem" role="menuitemradio" data-pool="all" aria-checked="true"><svg><use href="#i-shuffle"/></svg> Shuffle all visualisations</button>
+      <button class="menuitem" role="menuitemradio" data-pool="favourites" aria-checked="false"><svg><use href="#i-star"/></svg> Shuffle favourites only</button>
+    </div>
+
+    <div id="fav-panel" class="popover favs" hidden aria-label="Favourites">
+      <h3>Favourites</h3>
+      <div class="pair">
+        <button id="fav-shuffle" class="plain"><svg><use href="#i-star"/></svg> Shuffle favourites</button>
+        <button id="all-shuffle" class="plain"><svg><use href="#i-shuffle"/></svg> Shuffle all</button>
+      </div>
+      <ul id="fav-items" class="fav-items"></ul>
+      <button id="fav-current" class="plain"></button>
+    </div>
+
+    <div id="influence" class="popover influence" hidden>
+      <h3>Influence</h3>
+      <label class="slider">Sound → shape <input type="range" id="inf-shape" min="0" max="200" step="5"><output id="inf-shape-v"></output></label>
+      <p class="keys">How strongly the music deforms and kicks the geometry.</p>
+      <label class="slider">Movement <input type="range" id="inf-motion" min="10" max="200" step="5"><output id="inf-motion-v"></output></label>
+      <p class="keys">How fast and far things move, flow and turn.</p>
+      <label class="slider">Colour intensity <input type="range" id="inf-colour" min="0" max="200" step="5"><output id="inf-colour-v"></output></label>
+      <p class="keys">Saturation, brightness, glow and how much colour reacts. Bars &amp; Waves show measurements and are not affected.</p>
+      <button id="inf-reset" class="plain small">Reset to 100 %</button>
+    </div>
+    <div id="settings" class="popover" hidden>
+      <h3>Audio input <span id="audio-profile" class="keys"></span></h3>
+      <label class="slider">Input gain <input type="range" id="aud-gain" min="-24" max="36" step="1"><output id="aud-gain-v"></output></label>
+      <label class="slider">Noise floor <input type="range" id="aud-floor" min="-100" max="-20" step="1"><output id="aud-floor-v"></output></label>
+      <label class="slider">Beat sensitivity <input type="range" id="aud-range" min="3" max="16" step="0.5"><output id="aud-range-v"></output></label>
+      <label class="slider">Smoothing <input type="range" id="aud-smooth" min="0.5" max="2" step="0.05"><output id="aud-smooth-v"></output></label>
+      <div class="pair"><button id="calibrate" class="plain">Calibrate…</button><button id="aud-reset" class="plain">Reset</button></div>
+      <h3>Automatic mode</h3>
+      <label class="field block">Switch presets
+        <select id="auto-mode"><option value="music">when the music changes (new track or section)</option><option value="timer">on a timer</option></select>
+      </label>
+      <div class="pair">
+        <label class="field block">At most every (min)
+          <select id="auto-minutes"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option><option value="8">8</option><option value="12">12</option></select>
+        </label>
+        <label class="field block">Choose from
+          <select id="auto-pool"><option value="all">all visualisations</option><option value="favourites">favourites only</option><option value="collection">the current collection</option></select>
+        </label>
+      </div>
+      <div class="pair">
+        <label class="field block">Transition
+          <select id="auto-transition"><option value="mixed">mixed</option><option value="crossfade">crossfade</option><option value="blend">colour blend</option><option value="iris">iris</option><option value="wipe">wipe</option><option value="clock">clock</option></select>
+        </label>
+        <label class="field block">Length
+          <select id="auto-seconds"><option value="1">1 s</option><option value="2.5">2.5 s</option><option value="4">4 s</option><option value="6">6 s</option></select>
+        </label>
+      </div>
+      <h3>Appearance</h3>
+      <div class="pair">
+        <label class="field block">Style
+          <select id="ui-style"><option value="classic">Classic (Windows Media Player)</option><option value="modern">Modern</option></select>
+        </label>
+        <label class="field block">Mode
+          <select id="ui-theme"><option value="dark">Dark</option><option value="light">Light</option></select>
+        </label>
+      </div>
+      <h3>Interface</h3>
+      <label class="field block">Menu
+        <select id="menu-mode">
+          <option value="auto">show when the mouse moves (hides after 3 s)</option>
+          <option value="always">always show</option>
+          <option value="hidden">hidden (press M to show it)</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="edge-reveal"> When hidden, also show it when the mouse touches the bottom edge of the screen</label>
+      <label class="check"><input type="checkbox" id="fullscreen-now"> Full screen (F)</label>
+      <label class="check"><input type="checkbox" id="start-fullscreen"> Always start in full screen</label>
+      <label class="check"><input type="checkbox" id="limit-flashes"> Limit flashes (max 3 per second, reduced intensity)</label>
+      <div class="pair about"><span id="app-version" class="keys"></span><button id="open-logs" class="plain small">Open log folder</button></div>
+      <label class="field block">Show on display
+        <select id="display"></select>
+      </label>
+      <p class="keys">Keys: arrows or mouse wheel change preset (up and down change collection), R shuffles, A switches automatic mode, S favourites, L lists your favourites, H hides the menu, M shows it, F or a double-click goes full screen, U the influence controls, C calibrates the input, E shows the maths, D diagnostics, O these options, I the input list, ? shows this list on screen.</p>
+    </div>
+  </footer>
+
+  <div id="calib" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="calib-title">
+    <div class="modal-box">
+      <h2 id="calib-title">Calibrate audio responsiveness</h2>
+      <div id="calib-body"></div>
+      <div id="calib-actions" class="pair"></div>
+    </div>
+  </div>
+
+  <!-- Import map for Three.js add-ons (they import the bare name "three"). Allowed by CSP via its
+       exact SHA-256 hash: editing this line requires updating the hash in the CSP above
+       (test/csp.test.js verifies it). -->
+  <script type="importmap">{"imports":{"three":"../../node_modules/three/build/three.module.js","three/addons/":"../../node_modules/three/examples/jsm/"}}</script>
+  <script src="../../node_modules/katex/dist/katex.min.js"></script>
+  <script src="lib/dsp-utils.js"></script>
+  <script src="lib/feature-store.js"></script>
+  <script src="lib/auto-shuffle.js"></script>
+  <script src="lib/calibration.js"></script>
+  <script src="lib/menu-policy.js"></script>
+  <script src="visualizations/bars-waves.js"></script>
+  <script type="module" src="explain/specs.mjs"></script>
+  <script type="module" src="visualizations/experimental/morph.mjs"></script>
+  <script type="module" src="visualizations/experimental/swarm.mjs"></script>
+  <script type="module" src="visualizations/scope/phosphor.mjs"></script>
+  <script type="module" src="visualizations/terrain/terrain.mjs"></script>
+  <script type="module" src="visualizations/alchemy/alchemy.mjs"></script>
+  <script type="module" src="visualizations/alchemy/psychedelic.mjs"></script>
+  <script type="module" src="visualizations/battery/battery.mjs"></script>
+  <script type="module" src="visualizations/battery/warp.mjs"></script>
+  <script type="module" src="visualizations/ambience/ambience.mjs"></script>
+  <script src="app.js"></script>
+</body>
+</html>
